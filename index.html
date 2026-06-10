@@ -1189,7 +1189,7 @@ select {
             <div class="divl"></div>
             <div class="ssep">Vehículo y Conductor</div>
             <div class="qf-row" id="drv-qf"></div>
-            <div class="fr"><label for="driverName">Conductor</label><input id="driverName" type="text" placeholder="Nombre y apellidos"/></div>
+            <div class="fr"><label for="driverName">Conductor</label><input id="driverName" type="text" placeholder="Nombre y apellidos" autocomplete="off" list="driverList" oninput="onDriverInput(this.value)"/><datalist id="driverList"></datalist></div>
             <div class="fr"><label for="driverDNI">DNI Conductor</label><input id="driverDNI" type="text" placeholder="12345678X"/></div>
             <div class="fr2">
                 <div class="fr"><label for="plateTractor">Matrícula Tractora</label><input id="plateTractor" type="text" placeholder="1234 ABC" style="text-transform:uppercase"/></div>
@@ -2129,15 +2129,38 @@ window.saveDrvToAgenda = async function() {
         if (existing) {
             await dbDel(AG, existing.id);
             await dbAdd(AG, { type: 'drv', name, dni: dni.toUpperCase(), tractor: gvUp('plateTractor'), trailer: gvUp('plateTrailer'), savedAt: new Date().toISOString() });
-            toast('\u2713 Conductor actualizado', 'ok'); renderDrvQF(); renderAgenda(); return;
+            toast('\u2713 Conductor actualizado', 'ok'); renderDrvQF(); renderAgenda(); populateDriverList(); return;
         }
     }
     await dbAdd(AG, { type: 'drv', name, dni: dni ? dni.toUpperCase() : '', tractor: gvUp('plateTractor'), trailer: gvUp('plateTrailer'), savedAt: new Date().toISOString() });
-    toast('\u2713 Conductor guardado', 'ok'); renderDrvQF(); renderAgenda();
+    toast('\u2713 Conductor guardado', 'ok'); renderDrvQF(); renderAgenda(); populateDriverList();
 };
 
 window.fillRcv = async id => { const all = await dbAll(AG); const r = all.find(x => x.id == id); if (!r) return; sv('rcvBlock', r.block); tab('form'); toast('✓ Consignatario cargado', 'ok'); };
 window.fillDrv = async id => { const all = await dbAll(AG); const d = all.find(x => x.id == id); if (!d) return; sv('driverName', d.name); sv('driverDNI', d.dni || ''); sv('plateTractor', d.tractor || ''); sv('plateTrailer', d.trailer || ''); tab('form'); toast('✓ Conductor cargado', 'ok'); };
+
+// Autocompletar conductor — rellena DNI, transportista y matrículas al seleccionar
+window._driverCache = [];
+window.populateDriverList = async function() {
+    const all = await dbAll(AG);
+    window._driverCache = all.filter(x => x.type === 'driver' || x.dni || x.tractor);
+    const dl = document.getElementById('driverList');
+    if (!dl) return;
+    dl.innerHTML = window._driverCache.map(d => `<option value="${d.name}">`).join('');
+};
+window.onDriverInput = function(val) {
+    if (!val) return;
+    const match = window._driverCache.find(d => d.name.toLowerCase() === val.toLowerCase());
+    if (!match) return;
+    if (match.dni) sv('driverDNI', match.dni);
+    if (match.carrierId) {
+        const car = window._driverCache.find(x => x.id == match.carrierId);
+        if (car && car.block) sv('carrierBlock', car.block);
+    } else if (match.carrier) {
+        sv('carrierBlock', match.carrier);
+    }
+    toast('✓ DNI y transportista autocompletados', 'ok');
+};
 window.fillCar = async id => { const all = await dbAll(AG); const c = all.find(x => x.id == id); if (!c) return; sv('carrierBlock', c.block); tab('form'); renderCarQF(); toast('✓ Transportista cargado', 'ok'); };
 
 window.saveCarToAgenda = async function() {
@@ -2187,7 +2210,7 @@ window.editDrv = async function(id) {
                 const trailer = ((document.getElementById(iTrail) || { value: '' }).value || '').toUpperCase().trim();
                 if (!name) { toast('El nombre es obligatorio', 'err', 3000); return; }
                 await dbDel(AG, id); await dbAdd(AG, { type: 'drv', name, dni, tractor, trailer, savedAt: new Date().toISOString() });
-                closeBS(); renderAgenda(); renderDrvQF(); toast('✓ Conductor actualizado', 'ok');
+                closeBS(); renderAgenda(); renderDrvQF(); populateDriverList(); toast('✓ Conductor actualizado', 'ok');
             }}
         ]
     );
@@ -2735,7 +2758,7 @@ window._appInit = async function() {
     window.renderDrvQF      = renderDrvQF;
     window.renderCarQF      = renderCarQF;
     window.updateHistBadge  = updateHistBadge;
-    await updateHistBadge(); renderRcvQF(); renderDrvQF(); renderCarQF(); renderPackingQF();
+    await updateHistBadge(); renderRcvQF(); renderDrvQF(); renderCarQF(); renderPackingQF(); populateDriverList();
     if (window._attachAutosaveListeners) window._attachAutosaveListeners();
     await updateBackupStats();
 
